@@ -12,6 +12,53 @@
   #searchBox { width: 70%; }
   .note-area { margin-top: 10px; }
   textarea { width: 100%; height: 80px; }
+  
+  /* 拖拽相关样式 */
+  .draggable-news {
+    padding: 8px;
+    margin: 4px 0;
+    background: #f9f9f9;
+    border: 1px dashed #ccc;
+    cursor: grab;
+    user-select: none;
+  }
+  .draggable-news:active {
+    cursor: grabbing;
+  }
+  #todoDropZone {
+    min-height: 60px;
+    border: 2px dashed #3498db;
+    border-radius: 8px;
+    padding: 10px;
+    margin: 10px 0;
+    background: #eaf2f8;
+    transition: background 0.2s;
+  }
+  #todoDropZone.drag-over {
+    background: #d4e6f1;
+    border-color: #2980b9;
+  }
+  .todo-item {
+    display: flex;
+    align-items: center;
+    padding: 6px;
+    border-bottom: 1px solid #ddd;
+    background: white;
+    margin: 4px 0;
+    border-radius: 4px;
+  }
+  .todo-item span {
+    flex: 1;
+    margin-left: 8px;
+  }
+  .delete-todo {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -39,6 +86,16 @@
     <p id="matchNotify" style="color:#c0392b;"></p>
   </div>
 
+  <!-- 新增：备忘录拖拽区 -->
+  <div class="card">
+    <h3>📋 备忘录（把新闻拖到这里）</h3>
+    <p style="font-size:0.9em; color:#666;">👆 从上面的搜索结果里，按住新闻拖到这个框里</p>
+    <div id="todoDropZone">
+      <!-- 待办事项会动态添加 -->
+    </div>
+    <button onclick="clearAllTodos()" style="margin-top:8px;">清空全部待办</button>
+  </div>
+
   <div class="card">
     <h3>📝 我的小纸条（安全存本地）</h3>
     <textarea id="myNote" placeholder="写点备忘..."></textarea>
@@ -55,26 +112,22 @@
       "嗨，别忘了喝杯热水，黑河今天挺冷的吧 🧣"
     ];
 
-    // 页面加载时读取数据
+    // 页面加载
     fetch('data.json')
       .then(res => res.json())
       .then(data => {
         document.getElementById('updateTime').innerText = data.update_time;
         document.getElementById('weather').innerText = data.weather;
         document.getElementById('brief').innerText = data.brief;
-        // 随机显示一句问候
         const greet = greetings[Math.floor(Math.random() * greetings.length)];
         document.getElementById('greetingMsg').innerText = greet;
-        
-        // 检查是否有匹配的关注词
         checkMatches(data.matches);
-        // 读取保存的关注词
         loadKeywords();
-        // 读取纸条
         loadNote();
+        loadTodos();   // 加载保存的待办事项
       });
 
-    // 搜索功能
+    // 搜索功能（生成可拖拽的新闻条目）
     function searchNews() {
       const kw = document.getElementById('searchBox').value.trim();
       if (!kw) return;
@@ -85,12 +138,130 @@
         if (results.length === 0) {
           ul.innerHTML = '<li>没找到相关新闻</li>';
         } else {
-          results.forEach(t => { const li = document.createElement('li'); li.innerText = t; ul.appendChild(li); });
+          results.forEach((title, index) => {
+            const li = document.createElement('li');
+            li.className = 'draggable-news';
+            li.draggable = true;
+            li.id = 'news-' + index;
+            li.innerText = '⠿ ' + title;   // 加个抓手符号
+            // 拖拽事件
+            li.addEventListener('dragstart', handleDragStart);
+            li.addEventListener('dragend', handleDragEnd);
+            ul.appendChild(li);
+          });
         }
       });
     }
 
-    // ------------------ 关注词管理（localStorage） ------------------
+    // ---------- 拖拽功能 ----------
+    let draggedItem = null;
+
+    function handleDragStart(e) {
+      draggedItem = this;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', this.innerText.replace('⠿ ', '')); // 去掉抓手符号
+      this.style.opacity = '0.4';
+    }
+
+    function handleDragEnd(e) {
+      this.style.opacity = '1';
+      draggedItem = null;
+    }
+
+    // 放置区事件
+    const dropZone = document.getElementById('todoDropZone');
+
+    dropZone.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      this.classList.add('drag-over');
+    });
+
+    dropZone.addEventListener('dragleave', function(e) {
+      this.classList.remove('drag-over');
+    });
+
+    dropZone.addEventListener('drop', function(e) {
+      e.preventDefault();
+      this.classList.remove('drag-over');
+      const newsText = e.dataTransfer.getData('text/plain');
+      if (newsText) {
+        addTodoItem(newsText);
+      }
+    });
+
+    // 添加待办项到页面并存储
+    function addTodoItem(text) {
+      // 去重：如果已有完全相同的内容就不添加
+      const existing = getTodosFromStorage();
+      if (existing.includes(text)) {
+        alert('这条已经在备忘录里了~');
+        return;
+      }
+      // 创建界面元素
+      const div = document.createElement('div');
+      div.className = 'todo-item';
+      div.innerHTML = `<input type="checkbox" class="todo-check"><span>${text}</span><button class="delete-todo">✕</button>`;
+      
+      // 删除按钮事件
+      div.querySelector('.delete-todo').addEventListener('click', function() {
+        div.remove();
+        saveTodosFromDOM();
+      });
+      
+      // 复选框变更时不用特别存储，因为文字还在
+      div.querySelector('.todo-check').addEventListener('change', function() {
+        // 可以加个完成划线效果
+        const span = div.querySelector('span');
+        span.style.textDecoration = this.checked ? 'line-through' : 'none';
+      });
+      
+      dropZone.appendChild(div);
+      saveTodosFromDOM();   // 保存到本地存储
+    }
+
+    // 从 DOM 中收集所有待办文字并保存
+    function saveTodosFromDOM() {
+      const items = document.querySelectorAll('#todoDropZone .todo-item span');
+      const todos = Array.from(items).map(span => span.innerText);
+      localStorage.setItem('myTodos', JSON.stringify(todos));
+    }
+
+    // 从存储加载待办
+    function loadTodos() {
+      const todos = getTodosFromStorage();
+      todos.forEach(text => addTodoItemSilent(text)); // 不触发去重提示
+    }
+
+    // 静默添加（用于初始化）
+    function addTodoItemSilent(text) {
+      const div = document.createElement('div');
+      div.className = 'todo-item';
+      div.innerHTML = `<input type="checkbox" class="todo-check"><span>${text}</span><button class="delete-todo">✕</button>`;
+      div.querySelector('.delete-todo').addEventListener('click', function() {
+        div.remove();
+        saveTodosFromDOM();
+      });
+      div.querySelector('.todo-check').addEventListener('change', function() {
+        const span = div.querySelector('span');
+        span.style.textDecoration = this.checked ? 'line-through' : 'none';
+      });
+      dropZone.appendChild(div);
+    }
+
+    function getTodosFromStorage() {
+      const stored = localStorage.getItem('myTodos');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    function clearAllTodos() {
+      if (confirm('确定清空所有待办事项吗？')) {
+        document.getElementById('todoDropZone').innerHTML = '';
+        localStorage.removeItem('myTodos');
+      }
+    }
+
+    // ------------------ 关注词管理（不变） ------------------
     function getKeywords() {
       const stored = localStorage.getItem('myKeywords');
       return stored ? JSON.parse(stored) : [];
@@ -112,7 +283,6 @@
         saveKeywords(kws);
         loadKeywords();
         input.value = '';
-        // 立即重新检查匹配
         fetch('data.json').then(r=>r.json()).then(data => checkMatches(data.matches));
       }
     }
@@ -121,14 +291,12 @@
       loadKeywords();
       document.getElementById('matchNotify').innerText = '';
     }
-    // 检查数据里的 matches 中有没有包含关注词的标题
     function checkMatches(matchTitles) {
       const kws = getKeywords();
       if (kws.length === 0) return;
       const found = matchTitles.filter(title => kws.some(kw => title.includes(kw)));
       if (found.length > 0) {
         document.getElementById('matchNotify').innerText = '🔔 有关注内容：' + found[0];
-        // 浏览器通知（需要用户允许）
         if (Notification.permission === "granted") {
           new Notification("生活助手提醒", { body: found[0] });
         } else if (Notification.permission !== "denied") {
@@ -139,7 +307,7 @@
       }
     }
 
-    // ------------------ 小纸条 ------------------
+    // 小纸条
     function loadNote() {
       const note = localStorage.getItem('myNote') || '';
       document.getElementById('myNote').value = note;
