@@ -16,16 +16,21 @@ def get_weather(city):
     except:
         return "天气获取失败"
 
-# ---------- 2. 抓新闻 ----------
+# ---------- 2. 抓新闻（使用 NewsAPI 密钥）----------
 def get_news():
-    # 使用免费的 rss2json 服务 + 新华社中文新闻，完全免费免key
-    url = "https://api.rss2json.com/v1/api.json?rss_url=https://www.xinhuanet.com/politics/xhll.xml"
+    api_key = os.getenv("NEWSAPI_KEY")          # 从秘密坑里拿密钥
+    if not api_key:
+        return ["新闻密钥未配置"]
+    # 用 country=cn 拿国内新闻，pageSize=10 取10条
+    url = f"https://newsapi.org/v2/top-headlines?country=cn&pageSize=10&apiKey={api_key}"
     try:
         data = requests.get(url, timeout=10).json()
-        items = data.get("items", [])[:10]
-        return [item["title"] for item in items]
-    except:
-        return ["新闻获取失败"]
+        if data.get("status") != "ok":
+            return [f"新闻API错误: {data.get('message','')}"]
+        articles = data.get("articles", [])
+        return [a["title"] for a in articles if a.get("title")]
+    except Exception as e:
+        return [f"新闻获取失败: {e}"]
 
 # ---------- 3. 用大模型生成简报 ----------
 def generate_brief(weather, news_titles):
