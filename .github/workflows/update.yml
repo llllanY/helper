@@ -18,6 +18,7 @@ jobs:
       - name: 运行抓取脚本
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}        # 新挖的秘密
         run: python generate.py
       - name: 提交新生成的数据
         run: |
