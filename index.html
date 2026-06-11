@@ -77,12 +77,14 @@
     <ul id="searchResults"></ul>
   </div>
 
-  <div class="card">
-    <h3>📌 我关注的关键词（在浏览器存储）</h3>
+   <div class="card">
+    <h3>📌 我关注的关键词</h3>
     <input type="text" id="kwInput" placeholder="例如 黑河">
     <button onclick="addKeyword()">添加关注</button>
-    <p>当前关注：<span id="kwList"></span></p>
-    <button onclick="clearKeywords()">清空</button>
+    <div id="kwTags" style="margin: 10px 0; display: flex; flex-wrap: wrap; gap: 6px;">
+      <!-- 关键词标签会动态生成 -->
+    </div>
+    <button onclick="clearKeywords()">清空全部</button>
     <p id="matchNotify" style="color:#c0392b;"></p>
   </div>
 
