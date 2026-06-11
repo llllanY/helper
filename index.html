@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>黑河生活助手</title>
+<style>
+  body { font-family: sans-serif; max-width: 700px; margin: 30px auto; padding: 20px; background: #f5f5f5; }
+  .card { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .greeting { font-size: 1.2em; color: #2c3e50; }
+  input, button { padding: 10px; font-size: 16px; }
+  #searchBox { width: 70%; }
+  .note-area { margin-top: 10px; }
+  textarea { width: 100%; height: 80px; }
+</style>
+</head>
+<body>
+  <h1>🏠 黑河生活助手</h1>
+  <div class="card">
+    <div class="greeting" id="greetingMsg">正在加载...</div>
+    <p><strong>📅 更新时间：</strong><span id="updateTime"></span></p>
+    <p><strong>🌤 天气：</strong><span id="weather"></span></p>
+    <p><strong>📰 AI简报：</strong><span id="brief"></span></p>
+  </div>
+
+  <div class="card">
+    <h3>🔍 搜一搜简报</h3>
+    <input type="text" id="searchBox" placeholder="输入关键词，比如 供暖">
+    <button onclick="searchNews()">搜索</button>
+    <ul id="searchResults"></ul>
+  </div>
+
+  <div class="card">
+    <h3>📌 我关注的关键词（在浏览器存储）</h3>
+    <input type="text" id="kwInput" placeholder="例如 黑河">
+    <button onclick="addKeyword()">添加关注</button>
+    <p>当前关注：<span id="kwList"></span></p>
+    <button onclick="clearKeywords()">清空</button>
+    <p id="matchNotify" style="color:#c0392b;"></p>
+  </div>
+
+  <div class="card">
+    <h3>📝 我的小纸条（安全存本地）</h3>
+    <textarea id="myNote" placeholder="写点备忘..."></textarea>
+    <br><button onclick="saveNote()">保存纸条</button>
+    <p id="noteSaved" style="color:green;"></p>
+  </div>
+
+  <script>
+    // 礼貌用语数组
+    const greetings = [
+      "早上好！新的一天，加油鸭 🦆",
+      "晚上好，今天辛苦啦，看看窗外放松一下 ✨",
+      "你好呀，今天又是充满希望的一天 🌱",
+      "嗨，别忘了喝杯热水，黑河今天挺冷的吧 🧣"
+    ];
+
+    // 页面加载时读取数据
+    fetch('data.json')
+      .then(res => res.json())
+      .then(data => {
+        document.getElementById('updateTime').innerText = data.update_time;
+        document.getElementById('weather').innerText = data.weather;
+        document.getElementById('brief').innerText = data.brief;
+        // 随机显示一句问候
+        const greet = greetings[Math.floor(Math.random() * greetings.length)];
+        document.getElementById('greetingMsg').innerText = greet;
+        
+        // 检查是否有匹配的关注词
+        checkMatches(data.matches);
+        // 读取保存的关注词
+        loadKeywords();
+        // 读取纸条
+        loadNote();
+      });
+
+    // 搜索功能
+    function searchNews() {
+      const kw = document.getElementById('searchBox').value.trim();
+      if (!kw) return;
+      fetch('data.json').then(r=>r.json()).then(data=>{
+        const results = data.news.filter(title => title.includes(kw));
+        const ul = document.getElementById('searchResults');
+        ul.innerHTML = '';
+        if (results.length === 0) {
+          ul.innerHTML = '<li>没找到相关新闻</li>';
+        } else {
+          results.forEach(t => { const li = document.createElement('li'); li.innerText = t; ul.appendChild(li); });
+        }
+      });
+    }
+
+    // ------------------ 关注词管理（localStorage） ------------------
+    function getKeywords() {
+      const stored = localStorage.getItem('myKeywords');
+      return stored ? JSON.parse(stored) : [];
+    }
+    function saveKeywords(kws) {
+      localStorage.setItem('myKeywords', JSON.stringify(kws));
+    }
+    function loadKeywords() {
+      const kws = getKeywords();
+      document.getElementById('kwList').innerText = kws.join(', ') || '无';
+    }
+    function addKeyword() {
+      const input = document.getElementById('kwInput');
+      const kw = input.value.trim();
+      if (!kw) return;
+      const kws = getKeywords();
+      if (!kws.includes(kw)) {
+        kws.push(kw);
+        saveKeywords(kws);
+        loadKeywords();
+        input.value = '';
+        // 立即重新检查匹配
+        fetch('data.json').then(r=>r.json()).then(data => checkMatches(data.matches));
+      }
+    }
+    function clearKeywords() {
+      localStorage.removeItem('myKeywords');
+      loadKeywords();
+      document.getElementById('matchNotify').innerText = '';
+    }
+    // 检查数据里的 matches 中有没有包含关注词的标题
+    function checkMatches(matchTitles) {
+      const kws = getKeywords();
+      if (kws.length === 0) return;
+      const found = matchTitles.filter(title => kws.some(kw => title.includes(kw)));
+      if (found.length > 0) {
+        document.getElementById('matchNotify').innerText = '🔔 有关注内容：' + found[0];
+        // 浏览器通知（需要用户允许）
+        if (Notification.permission === "granted") {
+          new Notification("生活助手提醒", { body: found[0] });
+        } else if (Notification.permission !== "denied") {
+          Notification.requestPermission().then(perm => {
+            if (perm === "granted") new Notification("生活助手提醒", { body: found[0] });
+          });
+        }
+      }
+    }
+
+    // ------------------ 小纸条 ------------------
+    function loadNote() {
+      const note = localStorage.getItem('myNote') || '';
+      document.getElementById('myNote').value = note;
+    }
+    function saveNote() {
+      const text = document.getElementById('myNote').value;
+      localStorage.setItem('myNote', text);
+      document.getElementById('noteSaved').innerText = '已保存';
+      setTimeout(() => { document.getElementById('noteSaved').innerText = ''; }, 2000);
+    }
+  </script>
+</body>
+</html>
